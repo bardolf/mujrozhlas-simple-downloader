@@ -1,0 +1,15 @@
+services:
+  mrsd:
+    build: .
+    # image: mrsd:latest
+    restart: unless-stopped
+    stop_grace_period: 5m
+    ports:
+      - "8080:8080"          # change left side to your preferred host port
+    environment:
+      - AUTH_USER=admin      # change to your username
+      - AUTH_PASS=changeme   # change to your password
+    volumes:
+      - ./data:/data
+      - ./downloads:/downloads
+      - ./deleted:/deleted

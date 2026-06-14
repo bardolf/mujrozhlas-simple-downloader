@@ -1,0 +1,7 @@
+.gradle/
+build/
+data/
+downloads/
+deleted/
+*.db
+.idea/
