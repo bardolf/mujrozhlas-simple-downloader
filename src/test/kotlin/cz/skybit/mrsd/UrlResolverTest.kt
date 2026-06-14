@@ -67,4 +67,30 @@ class UrlResolverTest {
     fun `htmlDecode decodes entities and unescaping happens via json`() {
         assertEquals("\"a\" & 'b'", UrlResolver.htmlDecode("&quot;a&quot; &amp; &#039;b&#039;"))
     }
+
+    @Test
+    fun `contentSerialUuid reads the serial uuid a serial page declares`() {
+        val page = """
+            ...dataLayer = {"contentId":"3bbc44af-9344-38e5-bc70-46ec1fa36e7c",
+            "contentSerialName":"d70afb43-d57c-3e48-be04-69f13c69b3be: Anne Applebaumová: Autokracie, s.r.o.",
+            "contentShow":"9c1921eb-804c-3d21-a96f-f2405e2ddc56: Radiokniha"}...
+        """.trimIndent()
+        // A serial page (or serial-episode page) → resolve by the serial uuid, not contentId.
+        assertEquals("d70afb43-d57c-3e48-be04-69f13c69b3be", UrlResolver.contentSerialUuid(page))
+        assertEquals("3bbc44af-9344-38e5-bc70-46ec1fa36e7c", UrlResolver.contentId(page))
+    }
+
+    @Test
+    fun `contentSerialUuid is null on a standalone episode page`() {
+        val page = """{"contentId":"0b349bf0-531f-328f-be9d-429d53c50886","contentShow":"97e4e533-1cf0-3bbb-8026-c3e22ff82ad0: Toulky"}"""
+        assertNull(UrlResolver.contentSerialUuid(page))
+        assertEquals("0b349bf0-531f-328f-be9d-429d53c50886", UrlResolver.contentId(page))
+    }
+
+    @Test
+    fun `content fields are null on a plain show page`() {
+        val page = """{"contentShow":"97e4e533-1cf0-3bbb-8026-c3e22ff82ad0: Toulky českou minulostí"}"""
+        assertNull(UrlResolver.contentSerialUuid(page))
+        assertNull(UrlResolver.contentId(page))
+    }
 }

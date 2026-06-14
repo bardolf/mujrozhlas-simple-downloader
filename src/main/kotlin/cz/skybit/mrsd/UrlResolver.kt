@@ -10,12 +10,15 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 
 /**
- * Resolves a mujrozhlas.cz page URL to a concrete API entity, deterministically.
+ * Resolves a mujrozhlas.cz page URL to a concrete API entity, deterministically
+ * (no fuzzy title matching) — the page itself tells us what it is about.
  *
- * Every mujrozhlas.cz page embeds its entities as HTML attributes:
- *   data-entry='{"id":"...","uuid":"...","type":"show|serial|episode","url":"/path",...}'
- * We fetch the page, find the entry whose `url` matches the requested path, and
- * read its `uuid` + `type`. No fuzzy title matching — the page tells us exactly.
+ * Every page carries analytics fields that name its primary entity:
+ *   "contentSerialName":"<serial-uuid>: title"   → on a serial landing page AND on
+ *                                                   any episode page of a serial
+ *   "contentId":"<episode-uuid>"                  → a standalone episode page
+ * A serial signal wins (download the whole serial). As a fallback we also match
+ * the embedded `data-entry='{"uuid":..,"type":..,"url":"/path"}'` attributes by URL.
  */
 class UrlResolver(
     private val api: Api,
@@ -35,26 +38,32 @@ class UrlResolver(
     data class Entry(val uuid: String, val type: String, val url: String)
 
     fun resolve(url: String): Resolution {
-        val entry = findEntry(url)
-        return when (entry.type) {
-            "serial" -> resolveSerial(entry.uuid)
-            "episode" -> {
-                val episode = api.getEpisode(entry.uuid)
-                // An episode that belongs to a serial means "download the whole serial".
-                val serialUuid = episode.serialUuid
-                if (serialUuid != null) {
-                    resolveSerial(serialUuid)
-                } else {
-                    val show = episode.showUuid?.let { runCatching { api.getShow(it) }.getOrNull() }
-                    Resolution.Single(episode, show)
-                }
-            }
-            "show" -> throw ResolveException(
-                "Tohle je stránka pořadu, ne konkrétní díl ani seriál. " +
-                    "Vlož prosím URL jednoho dílu nebo seriálu."
-            )
-            else -> throw ResolveException("Neznámý typ obsahu '${entry.type}' na stránce.")
-        }
+        val html = fetchHtml(url)
+
+        // 1) Serial page (landing page or any episode page of a serial) → whole serial.
+        contentSerialUuid(html)?.let { return resolveSerial(it) }
+
+        // 2) A specific standalone item (episode page).
+        contentId(html)?.let { return resolveEpisode(it) }
+
+        // 3) Fallback: match an embedded data-entry by its URL.
+        matchEntry(extractEntries(html), url)?.let { return resolveEntry(it) }
+
+        // 4) A show / overview page with no single downloadable item.
+        throw showPageError()
+    }
+
+    private fun resolveEntry(entry: Entry): Resolution = when (entry.type) {
+        "serial" -> resolveSerial(entry.uuid)
+        "episode" -> resolveEpisode(entry.uuid)
+        else -> throw showPageError()
+    }
+
+    /** An episode that belongs to a serial means "download the whole serial". */
+    private fun resolveEpisode(episodeUuid: String): Resolution {
+        val episode = api.getEpisode(episodeUuid)
+        return episode.serialUuid?.let { resolveSerial(it) }
+            ?: Resolution.Single(episode, episode.showUuid?.let { runCatching { api.getShow(it) }.getOrNull() })
     }
 
     private fun resolveSerial(serialUuid: String): Resolution {
@@ -63,16 +72,10 @@ class UrlResolver(
         return Resolution.Series(serial.copy(episodes = episodes), episodes)
     }
 
-    /** Fetch the page and pick the data-entry whose url matches the requested path. */
-    fun findEntry(url: String): Entry {
-        val entries = extractEntries(fetchHtml(url))
-        if (entries.isEmpty()) {
-            throw ResolveException("Na stránce nebyl nalezen žádný přehratelný obsah ($url).")
-        }
-        return matchEntry(entries, url) ?: throw ResolveException(
-            "URL se nepodařilo spárovat s obsahem na stránce. Zkontroluj, že odkazuje na konkrétní díl nebo seriál."
-        )
-    }
+    private fun showPageError() = ResolveException(
+        "Tohle je stránka pořadu bez konkrétního dílu nebo seriálu. " +
+            "Vlož prosím URL jednoho dílu nebo seriálu."
+    )
 
     private fun fetchHtml(url: String): String {
         val request = Request.Builder()
@@ -93,7 +96,23 @@ class UrlResolver(
     companion object {
         private val DATA_ENTRY = Regex("""data-entry='([^']*)'""")
         private val TRAILING_ID = Regex("""-\d+$""")
+        private val UUID = Regex("""[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}""")
         private val json = Json { ignoreUnknownKeys = true }
+
+        /** Read a page analytics field like `"contentId":"…"` (raw or HTML-encoded). */
+        fun contentField(html: String, name: String): String? {
+            Regex(""""$name"\s*:\s*"([^"]*)"""").find(html)?.let { return it.groupValues[1] }
+            Regex("""&quot;$name&quot;:&quot;([^&]*)&quot;""").find(html)?.let { return it.groupValues[1] }
+            return null
+        }
+
+        /** Serial uuid the page declares as its subject (serial landing or serial-episode page). */
+        fun contentSerialUuid(html: String): String? =
+            contentField(html, "contentSerialName")?.let { UUID.find(it)?.value }
+
+        /** The page's primary specific item id — an episode uuid on a standalone episode page. */
+        fun contentId(html: String): String? =
+            contentField(html, "contentId")?.let { UUID.find(it)?.value }
 
         /** Parse all data-entry blobs out of a page's HTML. */
         fun extractEntries(html: String): List<Entry> =
