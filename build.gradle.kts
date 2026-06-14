@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     kotlin("jvm") version "2.4.0"
     kotlin("plugin.serialization") version "2.4.0"
@@ -53,6 +55,16 @@ tasks.test {
     useJUnitPlatform()
 }
 
+// No Gradle Java toolchain: the build runs on the JVM provided by mise
+// (.mise.toml pins temurin-25). We only pin the bytecode target — and Java and
+// Kotlin must agree on it.
+java {
+    sourceCompatibility = JavaVersion.VERSION_23
+    targetCompatibility = JavaVersion.VERSION_23
+}
+
 kotlin {
-    jvmToolchain(25)
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_23
+    }
 }
