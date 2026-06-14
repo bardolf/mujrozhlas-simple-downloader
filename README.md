@@ -44,3 +44,45 @@ docker compose up -d --build
 ```
 
 Data, stažené soubory a smazané položky jsou v `./data`, `./downloads` a `./deleted`.
+
+Případně použij hotový image z Docker Hubu — odkomentuj řádek `image:` v
+`docker-compose.yml` (a smaž `build: .`):
+
+```yaml
+image: <tvuj-dockerhub-ucet>/mrsd:latest
+```
+
+## Build & publikace na Docker Hub
+
+### Ručně z příkazové řádky
+
+```bash
+# přihlášení (stačí jednou)
+docker login
+
+# build a push multi-arch image (amd64 + arm64) přímo na Docker Hub
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t <tvuj-dockerhub-ucet>/mrsd:latest \
+  --push .
+```
+
+`<tvuj-dockerhub-ucet>` nahraď svým uživatelským jménem na Docker Hubu. Pokud
+chceš jen jednu architekturu, vynech `--platform` a použij `docker build -t … .`
+následovaný `docker push …`.
+
+### Automaticky přes GitHub Actions
+
+V `.github/workflows/docker-publish.yml` je připravený workflow, který image
+sestaví a vypublikuje. Spustí se po vytvoření tagu `v*` (např. `v1.0.0`) nebo
+ručně ze záložky **Actions**.
+
+Nastav v repozitáři (Settings → Secrets and variables → Actions):
+
+| | Jméno | Hodnota |
+|---|---|---|
+| Secret | `DOCKERHUB_USERNAME` | uživatelské jméno na Docker Hubu |
+| Secret | `DOCKERHUB_TOKEN` | access token (Docker Hub → Account Settings → Security) |
+| Variable *(volitelné)* | `DOCKERHUB_IMAGE` | jméno image, výchozí je `<username>/mrsd` |
+
+`git tag v0.1 && git push origin v0.1`

@@ -182,6 +182,7 @@ private fun org.jetbrains.exposed.v1.core.ResultRow.toSummary(): ItemSummary {
     val id = this[Items.id]
     val known = Parts.selectAll().where { Parts.itemId eq id }.count().toInt()
     val done = Parts.selectAll().where { (Parts.itemId eq id) and (Parts.downloaded eq true) }.count().toInt()
+    val m4bPath = this[Items.m4bPath]
     return ItemSummary(
         id = id,
         type = this[Items.type],
@@ -191,6 +192,7 @@ private fun org.jetbrains.exposed.v1.core.ResultRow.toSummary(): ItemSummary {
         downloadedParts = done,
         totalParts = this[Items.totalParts],
         knownParts = known,
+        m4bDownloadUrl = if (m4bPath != null && File(m4bPath).exists()) "/dl/$id" else null,
     )
 }
 

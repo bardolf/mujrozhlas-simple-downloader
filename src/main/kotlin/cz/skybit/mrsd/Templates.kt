@@ -16,6 +16,7 @@ data class ItemSummary(
     val downloadedParts: Int,
     val totalParts: Int,
     val knownParts: Int,
+    val m4bDownloadUrl: String?,
 )
 
 data class PartView(
@@ -175,6 +176,14 @@ fun FlowContent.itemCard(item: ItemSummary) {
         div {
             attributes["class"] = "row"
             span("badge ${statusClass(item.status)}") { +statusLabel(item.status) }
+            if (item.m4bDownloadUrl != null) {
+                a(href = item.m4bDownloadUrl) {
+                    attributes["class"] = "btn-sm"
+                    attributes["role"] = "button"
+                    attributes["download"] = ""
+                    +"Stáhnout M4B"
+                }
+            }
             button {
                 attributes["class"] = "outline secondary btn-sm"
                 attributes["hx-post"] = "/items/${item.id}/delete"

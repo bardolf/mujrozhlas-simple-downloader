@@ -1,7 +1,7 @@
 services:
   mrsd:
     build: .
-    # image: mrsd:latest
+    # image: <tvuj-dockerhub-ucet>/mrsd:latest   # použij místo build: . pro hotový image z Docker Hubu
     restart: unless-stopped
     stop_grace_period: 5m
     ports:
